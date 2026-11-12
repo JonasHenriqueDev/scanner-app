@@ -1,0 +1,12 @@
+[Unit]
+Description=Espelha os scans no servidor publico (downloads rapidos)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/bin/scanner-sync.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target

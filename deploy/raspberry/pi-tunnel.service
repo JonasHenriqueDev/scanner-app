@@ -1,0 +1,14 @@
+[Unit]
+Description=Tunel SSH reverso Raspberry -> servidor publico
+After=network-online.target
+Wants=network-online.target
+
+# Troque SEU_SERVIDOR pelo IP/dominio da VPS. Portas na VPS ficam so em localhost:
+#   2222 -> SSH do Pi, 18080 -> scanservjs (8080)
+[Service]
+ExecStart=/usr/bin/ssh -NT -i %h/.ssh/pi_tunnel -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o BatchMode=yes -o StrictHostKeyChecking=yes -R localhost:2222:localhost:22 -R localhost:18080:localhost:8080 tunnel@SEU_SERVIDOR
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

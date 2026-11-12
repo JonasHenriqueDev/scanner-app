@@ -1,0 +1,56 @@
+# Bloco do Caddy na VPS. Troque:
+#   scanner.exemplo.com  -> seu dominio
+#   TROQUE_POR_UMA_CHAVE -> uma chave longa e aleatoria (ex.: openssl rand -base64 24 | tr -dc A-Za-z0-9)
+# O link de acesso fica: https://scanner.exemplo.com/?k=TROQUE_POR_UMA_CHAVE
+
+scanner.exemplo.com {
+	encode gzip
+	# Chave de acesso: ?k= na URL (fica no atalho) ou cookie gravado na 1a visita.
+	@comchave query k=TROQUE_POR_UMA_CHAVE
+	header @comchave Set-Cookie "scan_k=TROQUE_POR_UMA_CHAVE; Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
+	@autorizado expression `{http.request.uri.query.k} == "TROQUE_POR_UMA_CHAVE" || {http.request.cookie.scan_k} == "TROQUE_POR_UMA_CHAVE"`
+
+	# API (scanner e arquivos): so com a chave
+	handle /api/* {
+		handle @autorizado {
+			# Download: se ja existe a copia na VPS (scanner-sync), entrega daqui; senao busca no Pi.
+			@download {
+				method GET
+				path_regexp ^/api/v1/files/[^/]+$
+			}
+			handle @download {
+				uri strip_prefix /api/v1/files
+				@copia file {
+					root /srv/scanner-files
+					try_files {path}
+				}
+				handle @copia {
+					root * /srv/scanner-files
+					header Content-Disposition "attachment; filename=\"{http.request.uri.path.file}\""
+					header Cache-Control "private, max-age=86400"
+					file_server
+				}
+				handle {
+					rewrite * /api/v1/files{path}?{query}
+					reverse_proxy 127.0.0.1:18080
+				}
+			}
+			handle {
+				reverse_proxy 127.0.0.1:18080
+			}
+		}
+		handle {
+			respond "Acesso negado" 403
+		}
+	}
+
+	# Tela do app: publica (nao contem dados) para Android/iPhone conseguirem instalar
+	handle {
+		root * /srv/scanner-app
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		header /sw.js Cache-Control "no-cache"
+		header / Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
