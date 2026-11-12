@@ -87,13 +87,15 @@ const DEFAULTS = { quality: 'high' as Quality, filters: [] as string[], brightne
 
 interface Props {
   device: Device;
+  /** Confirma o scanner atual (o ID USB muda quando ele e religado). */
+  checkDevice: () => Promise<Device | null>;
   ocrAvailable: boolean;
   onBusyChange: (busy: boolean) => void;
   onDone: (file: ScanFile) => void;
   onError: (message: string) => void;
 }
 
-export default function ScanPage({ device, ocrAvailable, onBusyChange, onDone, onError }: Props) {
+export default function ScanPage({ device, checkDevice, ocrAvailable, onBusyChange, onDone, onError }: Props) {
   const theme = useTheme();
   const desktop = useMediaQuery(theme.breakpoints.up('md'));
   const f = device.features;
@@ -177,9 +179,9 @@ export default function ScanPage({ device, ocrAvailable, onBusyChange, onDone, o
   const advancedChanged = quality !== 'high' || filters.length > 0 || s.brightness !== 0 || s.contrast !== 0
     || !QUICK_RES.includes(resolution);
 
-  const request = (index: number, batch: string): ScanRequest => ({
+  const request = (index: number, batch: string, deviceId: string): ScanRequest => ({
     params: {
-      deviceId: device.id, mode, resolution, top: 0, left: 0, width: area.w, height: area.h,
+      deviceId, mode, resolution, top: 0, left: 0, width: area.w, height: area.h,
       ...(hasBrightness ? { brightness: s.brightness } : {}),
       ...(hasContrast ? { contrast: s.contrast } : {})
     },
@@ -189,6 +191,13 @@ export default function ScanPage({ device, ocrAvailable, onBusyChange, onDone, o
     index
   });
 
+  /** ID atual do scanner (muda quando ele e religado); erro claro se sumiu. */
+  async function currentId(): Promise<string> {
+    const d = await checkDevice();
+    if (!d) throw new ApiError("Scanner não encontrado. Verifique se ele está ligado e conectado.");
+    return d.id;
+  }
+
   const fail = (e: unknown) =>
     onError(e instanceof ApiError ? e.message : 'Algo deu errado ao digitalizar. Tente de novo.');
 
@@ -196,7 +205,7 @@ export default function ScanPage({ device, ocrAvailable, onBusyChange, onDone, o
     setBusy('preview');
     try {
       await api.createPreview({
-        deviceId: device.id, mode, resolution: 100,
+        deviceId: await currentId(), mode, resolution: 100,
         ...(hasBrightness ? { brightness: s.brightness } : {}),
         ...(hasContrast ? { contrast: s.contrast } : {})
       });
@@ -212,11 +221,11 @@ export default function ScanPage({ device, ocrAvailable, onBusyChange, onDone, o
     setBusy('scan');
     try {
       if (multi) {
-        const res = await api.scan(request(pages.length + 1, 'manual'));
+        const res = await api.scan(request(pages.length + 1, 'manual', await currentId()));
         if (res.image) setPages((p) => [...p, `data:image/jpeg;base64,${res.image}`]);
         navigator.vibrate?.(60);
       } else {
-        const res = await api.scan(request(1, 'none'));
+        const res = await api.scan(request(1, 'none', await currentId()));
         if (res.file) finishWith(res.file);
       }
     } catch (e) {
@@ -229,7 +238,7 @@ export default function ScanPage({ device, ocrAvailable, onBusyChange, onDone, o
   async function doFinish() {
     setBusy('finish');
     try {
-      const res = await api.scan(request(-1, 'manual'));
+      const res = await api.scan(request(-1, 'manual', await currentId()));
       setPages([]);
       if (res.file) finishWith(res.file);
     } catch (e) {

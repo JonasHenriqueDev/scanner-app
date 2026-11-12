@@ -16,36 +16,57 @@ export function useScanner(busy: boolean) {
   const last = useRef(0);
   const ctrl = useRef<AbortController | null>(null);
 
-  const refresh = useCallback(async () => {
+  /**
+   * Consulta o scanner. Com silent=true nao mostra "Procurando…" (usado na
+   * verificacao automatica e antes de cada digitalizacao). Devolve o device atual.
+   */
+  const refresh = useCallback(async (silent = false): Promise<Device | null> => {
     ctrl.current?.abort();
     const c = new AbortController();
     ctrl.current = c;
     last.current = Date.now();
-    setState({ status: 'loading' });
+    if (!silent) setState({ status: 'loading' });
     try {
       // Duas aberturas simultaneas podem pegar o cache no meio da recriacao e
       // receber lista vazia: tenta de novo algumas vezes antes de desistir.
       let context = await api.context(c.signal);
       for (let i = 0; i < 3 && context.devices.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 700));
-        if (c.signal.aborted) return;
+        if (c.signal.aborted) return null;
         context = await api.context(c.signal);
       }
-      if (c.signal.aborted) return;
-      const device = context.devices[0];
-      setState(device ? { status: 'ready', device, context } : { status: 'missing' });
+      if (c.signal.aborted) return null;
+      const device = context.devices[0] ?? null;
+      setState((old) => {
+        if (!device) return { status: 'missing' };
+        // Mesmo scanner e mesmo ID: mantem o objeto (nao re-renderiza a tela)
+        if (old.status === 'ready' && old.device.id === device.id) return old;
+        return { status: 'ready', device, context };
+      });
+      return device;
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
+      if ((e as Error).name === 'AbortError') return null;
       setState({
         status: 'error',
         message: e instanceof ApiError ? e.message : 'Não foi possível falar com o scanner.'
       });
+      return null;
     }
   }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Sem scanner (desligado, ligando, servidor reiniciando): tenta sozinho a cada 4 s
+  // e volta para "Pronto" assim que ele responder, sem o usuario precisar tocar.
+  useEffect(() => {
+    if (state.status !== 'missing' && state.status !== 'error') return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh(true);
+    }, 4000);
+    return () => clearInterval(t);
+  }, [state.status, refresh]);
 
   useEffect(() => {
     const onVisible = () => {

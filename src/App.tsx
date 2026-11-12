@@ -50,7 +50,7 @@ export default function App() {
         return <Chip size="small" label="Pronto" icon={<CheckCircleIcon style={{ color: '#2e7d32' }} />}
           sx={{ bgcolor: '#fff', color: '#1b5e20', fontWeight: 600 }} aria-label="Scanner pronto" />;
       default:
-        return <Chip size="small" label="Desconectado" icon={<UsbOffIcon />} color="error" onClick={refresh}
+        return <Chip size="small" label="Desconectado" icon={<UsbOffIcon />} color="error" onClick={() => refresh()}
           aria-label="Scanner desconectado. Tocar para procurar de novo" />;
     }
   })();
@@ -104,7 +104,7 @@ export default function App() {
             a previa nem as paginas de um PDF em andamento ao trocar de aba. */}
         <Box sx={{ display: tab === 'scan' ? 'block' : 'none' }}>
           {state.status === 'ready' ? (
-            <ScanPage device={state.device} ocrAvailable={ocrAvailable} onBusyChange={setBusy}
+            <ScanPage device={state.device} checkDevice={() => refresh(true)} ocrAvailable={ocrAvailable} onBusyChange={setBusy}
               onError={onError}
               onDone={(f) => { setResult(f); setFilesKey((k) => k + 1); }} />
           ) : state.status === 'loading' ? (
@@ -121,7 +121,7 @@ export default function App() {
               <Typography color="text.secondary">
                 {state.status === 'error' ? state.message : 'Verifique se o scanner está ligado e com o cabo USB conectado.'}
               </Typography>
-              <Button variant="contained" size="large" startIcon={<RefreshIcon />} onClick={refresh}>
+              <Button variant="contained" size="large" startIcon={<RefreshIcon />} onClick={() => refresh()}>
                 Procurar de novo
               </Button>
             </Stack>
@@ -177,7 +177,7 @@ export default function App() {
       </Dialog>
 
       <FileViewer file={viewing} onClose={() => setViewing(null)} onMessage={onMessage} />
-      <SettingsDialog open={settings} onClose={() => setSettings(false)} state={state} onRefresh={refresh}
+      <SettingsDialog open={settings} onClose={() => setSettings(false)} state={state} onRefresh={() => refresh()}
         onMessage={onMessage} />
 
       <Snackbar open={!!toast} autoHideDuration={toast?.error ? 7000 : 3000} onClose={() => setToast(null)}
